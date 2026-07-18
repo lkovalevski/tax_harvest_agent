@@ -110,6 +110,12 @@ cp .env.example .env
 | Image input (phone photos of receipts) | 📋 Planned |
 | Multi-user / SaaS version | 📋 Planned |
 
+
+## 📸 Sample Output
+
+![ProcessCompleted](assets/proceso_completo.png)
+
+
 ## What I learned
 
 Building this required dealing with a government portal that was never designed to be automated. The main lesson: **the browser automation is the easy part — understanding the business domain (Argentine tax law, form structure, fiscal periods) is where most of the complexity lives**.
