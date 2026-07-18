@@ -1,0 +1,42 @@
+# ── Credenciales y datos sensibles ────────────────────────────────────────────
+.env                    # CUIT, clave fiscal, API keys — NUNCA subir
+
+# ── Datos fiscales personales ─────────────────────────────────────────────────
+data/                   # facturas.json tiene datos reales de deducciones
+procesadas/             # PDFs ya procesados con info fiscal
+facturas/               # PDFs originales con datos personales
+scratch/
+
+# ── Carpeta de screenshots de errores ─────────────────────────────────────────
+data/error_*.png
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ── Entornos virtuales ────────────────────────────────────────────────────────
+venv/
+.venv/
+.ai_tax_harvest/        # nombre del venv que usaste en Windows
+
+# ── IDEs ──────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.code-workspace
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store               # macOS
+Thumbs.db               # Windows
+desktop.ini
+
+# ── Playwright ────────────────────────────────────────────────────────────────
+playwright-report/
+test-results/
+
+# ── Mantener carpetas vacías en el repo (sin su contenido) ───────────────────
+!data/.gitkeep
+!facturas/.gitkeep
+!procesadas/.gitkeep
