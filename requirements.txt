@@ -1,0 +1,10 @@
+# Tax Harvest Agent — Dependencias
+openai>=1.30.0
+anthropic>=0.25.0
+pdfplumber>=0.10.0
+playwright>=1.44.0
+flask>=3.0.0
+python-dotenv>=1.0.0
+
+# Solo necesario si tus PDFs son escaneados (sin texto digital)
+# pdf2image>=1.17.0
