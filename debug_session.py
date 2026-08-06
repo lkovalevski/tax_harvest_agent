@@ -218,27 +218,36 @@ def step_siradig(page: Page, sel: dict) -> bool:
         pausar("El browser volvió al login. Completá el login manualmente y presioná Enter cuando veas el portal de AFIP con tus servicios.")
 
     # ── Escala 2: clickear SiRADIG desde el portal ──────────────────────────
-    # El link abre en nueva pestaña — hay que capturarla con expect_page()
+    # Si SiRADIG no aparece en "mas utilizados", ir a "Ver todos" primero.
     print("  ▶ Buscando link SiRADIG - Trabajador en el portal...")
-    try:
-        link = page.locator("text=SiRADIG - Trabajador").first
-        link.wait_for(timeout=5000)
 
-        # Capturar nueva pestaña si el link tiene target="_blank"
-        with page.context.expect_page() as new_page_info:
+    def click_siradig(pg):
+        link = pg.locator("text=SiRADIG - Trabajador").first
+        link.wait_for(timeout=5000)
+        with pg.context.expect_page() as new_page_info:
             link.click()
-        new_page = new_page_info.value
-        new_page.wait_for_load_state("networkidle")
+        new_pg = new_page_info.value
+        new_pg.wait_for_load_state("networkidle")
         time.sleep(3)
-        page = new_page  # trabajar en la nueva pestaña
-        print(f"  ✅ SiRADIG abierto en nueva pestaña: {page.url}")
-    except Exception as e:
-        print(f"  ⚠️  No abrió nueva pestaña ({e}), revisando pestaña actual...")
-        # Puede ser que navegó en la misma pestaña
-        page.wait_for_load_state("networkidle")
-        time.sleep(2)
-        if "serviciosjava2" not in page.url:
-            pausar("Hacé click en 'SiRADIG - Trabajador' manualmente y presioná Enter cuando cargue SiRADIG.")
+        return new_pg
+
+    try:
+        page = click_siradig(page)
+        print(f"  ✅ SiRADIG abierto en nueva pestana: {page.url}")
+    except Exception:
+        print("  ⚠️  SiRADIG no esta en servicios recientes — abriendo Ver todos...")
+        try:
+            ver_todos = page.locator("a[href='/portal/app/mis-servicios']").first
+            ver_todos.wait_for(timeout=5000)
+            ver_todos.click()
+            page.wait_for_load_state("networkidle")
+            time.sleep(2)
+            print("  ✅ Pagina Ver todos abierta")
+            page = click_siradig(page)
+            print(f"  ✅ SiRADIG abierto: {page.url}")
+        except Exception as e:
+            print(f"  ❌ No pude encontrar SiRADIG: {e}")
+            pausar("Hace click en SiRADIG - Trabajador manualmente y presiona Enter cuando cargue.")
 
     print(f"  URL actual: {page.url}")
 
