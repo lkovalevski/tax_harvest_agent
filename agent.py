@@ -161,9 +161,12 @@ class ARCAAgent:
         self.page.wait_for_load_state("networkidle")
         self._wait(3)
 
-        # Clickear desde el portal — el link abre en nueva pestaña
+        # Buscar SiRADIG — primero intentar en "más utilizados",
+        # si no aparece, ir a "Ver todos" y buscarlo ahí.
         self._log("Buscando SiRADIG en el portal...")
-        try:
+
+        def _click_siradig_nueva_pestana():
+            """Clickea el link SiRADIG y captura la nueva pestaña."""
             link = self.page.locator("text=SiRADIG - Trabajador").first
             link.wait_for(timeout=5000)
             with self.page.context.expect_page() as new_page_info:
@@ -171,17 +174,26 @@ class ARCAAgent:
             new_page = new_page_info.value
             new_page.wait_for_load_state("networkidle")
             self._wait(3)
-            self.page = new_page  # trabajar en la nueva pestaña
+            self.page = new_page
             self._log(f"SiRADIG abierto: {self.page.url}", "ok")
-        except Exception as e:
-            self._log(f"No abrió nueva pestaña ({e}), revisando pestaña actual...", "warn")
-            self.page.wait_for_load_state("networkidle")
-            self._wait(2)
-            if "serviciosjava2" not in self.page.url:
-                self._log("Intentando URL directa como fallback...")
-                self.page.goto("https://serviciosjava2.afip.gob.ar/radig/jsp/determinarContribuyente.do?codigo=2026")
+
+        try:
+            # Intento 1: SiRADIG visible en "más utilizados"
+            _click_siradig_nueva_pestana()
+        except Exception:
+            self._log("SiRADIG no está en servicios recientes — abriendo 'Ver todos'...", "warn")
+            try:
+                # Intento 2: click en "Ver todos" y buscar ahí
+                ver_todos = self.page.locator("a[href='/portal/app/mis-servicios']").first
+                ver_todos.wait_for(timeout=5000)
+                ver_todos.click()
                 self.page.wait_for_load_state("networkidle")
                 self._wait(2)
+                self._log("Página 'Ver todos los servicios' abierta", "ok")
+                _click_siradig_nueva_pestana()
+            except Exception as e:
+                self._log(f"No pude encontrar SiRADIG: {e}", "error")
+                raise
 
         if ("menu_sel_empresa" in self.page.url or
                 self.page.locator("text=Seleccione la Persona").count() > 0):
@@ -255,12 +267,36 @@ class ARCAAgent:
             self._wait(1)
         self._log("Deducciones abiertas", "ok")
 
+    def volver_a_deducciones(self):
+        """Navega al listado de deducciones y expande la sección 3.
+        Se llama antes de cada factura para asegurar el estado correcto."""
+        s = self.sel["deducciones"]
+        self._log("Volviendo al listado de deducciones...")
+        self.page.goto("https://serviciosjava2.afip.gob.ar/radig/jsp/verMenuDeducciones.do")
+        self.page.wait_for_load_state("networkidle")
+        self._wait(1.5)
+
+        # Cerrar modal recordatorio si aparece
+        self._cerrar_modal_si_existe()
+
+        # Expandir sección 3 si está colapsada
+        seccion = self.page.locator(s["seccion_3"])
+        if seccion.count() > 0:
+            # Verificar si ya está expandida buscando el botón + de educación
+            if self.page.locator("span.mini_boton_agregar").count() == 0:
+                self._click(s["seccion_3"], "Sección 3")
+                self._wait(1)
+        self._log("Deducciones listas", "ok")
+
     def cargar_gasto_educacion(self, factura: dict) -> bool:
         sf = self.sel["form_educacion"]
         sm = self.sel["modal_comprobante"]
         sd = self.sel["deducciones"]
         self._log(f"Cargando: {factura['archivo']}")
         try:
+            # Asegurar que estamos en la página correcta con sección 3 expandida
+            self.volver_a_deducciones()
+
             # Abrir formulario de Gastos de Educación (el + correspondiente)
             btns = self.page.locator("span.mini_boton_agregar").all()
             if len(btns) >= 2:
