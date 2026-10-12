@@ -25,8 +25,8 @@ PORT             = int(os.getenv("PORT", 5000))
 def verificar_config():
     """Chequea que las variables de entorno necesarias estén seteadas."""
     errores = []
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        errores.append("  ❌ ANTHROPIC_API_KEY no está configurada")
+    if not os.getenv("OPENAI_API_KEY"):
+        errores.append("  ❌ OPENAI_API_KEY no está configurada")
     if not os.getenv("AFIP_CUIT"):
         errores.append("  ❌ AFIP_CUIT no está configurado")
     if not os.getenv("AFIP_CLAVE"):
@@ -111,7 +111,7 @@ def lanzar_agente_directo():
 def banner():
     print("""
 ╔══════════════════════════════════════════╗
-║   🌿  Tax Harvest Agent — ARCA/SiRADIG  ║
+║   🌿 Tax Harvest Agent — ARCA/SiRADIG   ║
 ╚══════════════════════════════════════════╝""")
 
 
