@@ -117,6 +117,8 @@ class ARCAAgent:
         self.browser    = self.playwright.chromium.launch(headless=HEADLESS, slow_mo=400)
         context         = self.browser.new_context(viewport={"width": 1280, "height": 800})
         self.page       = context.new_page()
+        # Aumentar timeout global a 60s para conexiones lentas a AFIP
+        self.page.set_default_timeout(60000)
         self._log("Navegador iniciado", "ok")
 
     def cerrar(self):
@@ -256,36 +258,53 @@ class ARCAAgent:
         self._log("F572 abierto", "ok")
 
     def abrir_deducciones(self):
-        s = self.sel["deducciones"]
+        # Usar anchor URL para expandir sección 3 automáticamente
         self.page.goto(
-            "https://serviciosjava2.afip.gob.ar/radig/jsp/verMenuDeducciones.do"
+            "https://serviciosjava2.afip.gob.ar/radig/jsp/verMenuDeducciones.do#header_deducciones"
         )
         self.page.wait_for_load_state("networkidle")
-        self._wait(1)
-        if self.page.locator(s["seccion_3"]).count() > 0:
-            self._click(s["seccion_3"], "Sección 3")
-            self._wait(1)
+        self._wait(1.5)
+        self._cerrar_modal_si_existe()
         self._log("Deducciones abiertas", "ok")
 
     def volver_a_deducciones(self):
-        """Navega al listado de deducciones y expande la sección 3.
-        Se llama antes de cada factura para asegurar el estado correcto."""
-        s = self.sel["deducciones"]
-        self._log("Volviendo al listado de deducciones...")
-        self.page.goto("https://serviciosjava2.afip.gob.ar/radig/jsp/verMenuDeducciones.do")
+        """Navega a deducciones y expande la sección 3 explícitamente con click.
+        El anchor URL no es confiable en este portal JSP — hay que clickear el título."""
+        self._log("Navegando a sección Deducciones...")
+        self.page.goto(
+            "https://serviciosjava2.afip.gob.ar/radig/jsp/verMenuDeducciones.do"
+        )
         self.page.wait_for_load_state("networkidle")
         self._wait(1.5)
 
         # Cerrar modal recordatorio si aparece
         self._cerrar_modal_si_existe()
 
-        # Expandir sección 3 si está colapsada
-        seccion = self.page.locator(s["seccion_3"])
-        if seccion.count() > 0:
-            # Verificar si ya está expandida buscando el botón + de educación
-            if self.page.locator("span.mini_boton_agregar").count() == 0:
-                self._click(s["seccion_3"], "Sección 3")
-                self._wait(1)
+        # Expandir sección 3 clickeando su título
+        # El botón + solo es visible DESPUÉS de que la sección está expandida
+        SELECTORES_SECCION_3 = [
+            "text=3 - Deducciones y desgravaciones",
+            "text=Deducciones y desgravaciones",
+            "#header_deducciones",
+            "a[href='#header_deducciones']",
+        ]
+        expandido = False
+        for s in SELECTORES_SECCION_3:
+            try:
+                el = self.page.locator(s).first
+                if el.count() > 0:
+                    el.click()
+                    self._wait(1)
+                    # Verificar que el + ya es visible
+                    if self.page.locator("span.mini_boton_agregar").count() > 0:
+                        expandido = True
+                        break
+            except Exception:
+                continue
+
+        if not expandido:
+            self._log("No pude expandir sección 3 automáticamente", "warn")
+
         self._log("Deducciones listas", "ok")
 
     def cargar_gasto_educacion(self, factura: dict) -> bool:
@@ -337,35 +356,59 @@ class ARCAAgent:
 
                 apellido = factura["familiar_apellido"].upper().strip()
                 nombre   = (factura.get("familiar_nombre") or "").upper().strip()
+                self._log(f"Buscando familiar: apellido='{apellido}' nombre='{nombre}'")
 
                 try:
                     # La tabla específica de cargas de familia (id confirmado: tabla_cargas_familia)
                     tabla = self.page.locator("#tabla_cargas_familia")
                     tabla.wait_for(timeout=5000)
 
+                    # Log de todas las filas para debug
+                    filas = tabla.locator("tr").all()
+                    for i, fila in enumerate(filas):
+                        self._log(f"Fila {i}: '{fila.inner_text().strip()}'")
+
                     # IMPORTANTE: si solo filtramos por apellido, hermanos con el
                     # mismo apellido matchean la misma fila (siempre cae en .first).
                     # Hay que filtrar por apellido Y nombre combinados.
                     fila = None
-                    if nombre:
-                        candidata = tabla.locator(f"tr:has-text('{apellido}'):has-text('{nombre}')")
-                        if candidata.count() == 1:
-                            fila = candidata.first
-                        elif candidata.count() > 1:
-                            self._log(f"⚠️ Ambiguo: {candidata.count()} filas matchean '{apellido} {nombre}'", "warn")
-                            fila = candidata.first
+
+                    # La tabla tiene saltos de línea entre celdas, por eso
+                    # has-text combinado falla. Iteramos filas y comparamos
+                    # el texto completo de cada una.
+                    buscar = f"{apellido}, {nombre}" if nombre else apellido
+                    buscar_alt = f"{apellido},{nombre}" if nombre else apellido
+
+                    todas_filas = tabla.locator("tr").all()
+                    for tr in todas_filas:
+                        texto = tr.inner_text().upper().replace("\n", " ").replace("  ", " ").strip()
+                        if buscar in texto or buscar_alt in texto:
+                            fila = tr
+                            self._log(f"Familiar encontrado por texto completo: '{buscar}'", "ok")
+                            break
+
+                    if fila is None and nombre:
+                        # Fallback 1: buscar solo por nombre (por si el formato cambió)
+                        for tr in todas_filas:
+                            texto = tr.inner_text().upper()
+                            if nombre in texto:
+                                fila = tr
+                                self._log(f"Familiar encontrado por nombre: '{nombre}'", "ok")
+                                break
 
                     if fila is None:
-                        # Fallback: solo apellido (puede ser ambiguo con hermanos)
-                        todas = tabla.locator(f"tr:has-text('{apellido}')")
-                        cant = todas.count()
-                        if cant > 1:
-                            self._log(
-                                f"⚠️ {cant} familiares con apellido '{apellido}' y sin nombre "
-                                f"para desambiguar — revisar manualmente cuál se seleccionó",
-                                "warn"
-                            )
-                        fila = todas.first
+                        # Fallback 2: solo apellido — puede ser ambiguo con hermanos
+                        for tr in todas_filas:
+                            texto = tr.inner_text().upper()
+                            if apellido in texto:
+                                fila = tr
+                                cant = sum(1 for t in todas_filas if apellido in t.inner_text().upper())
+                                if cant > 1:
+                                    self._log(
+                                        f"⚠️ {cant} familiares con apellido '{apellido}' — "
+                                        f"tomando el primero, revisar manualmente", "warn"
+                                    )
+                                break
 
                     fila.wait_for(timeout=5000)
 

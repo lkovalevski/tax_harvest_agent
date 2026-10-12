@@ -338,7 +338,7 @@ function cerrarModal() {
 }
 
 async function guardarEdicion() {
-  const familiar = document.getElementById('edit-familiar').value.trim().split(/\s+/);
+  const familiar = document.getElementById('edit-familiar').value.trim().split(/\\s+/);
   const data = {
     archivo:            document.getElementById('edit-archivo').value,
     denominacion:       document.getElementById('edit-denominacion').value,
@@ -448,4 +448,4 @@ def api_lanzar():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=8080, host='0.0.0.0')
